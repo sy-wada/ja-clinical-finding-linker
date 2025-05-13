@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 from openai import OpenAI
 from tqdm.auto import tqdm
-from batch_templates import samples, prompts, ExtractionResult
+from json_generator_prompt import samples, prompts, ExtractionResult
 import time
 from datetime import datetime
 
