@@ -5,7 +5,7 @@ This repository contains scripts used to build a LoRA adapter that extracts Japa
 ## Dataset
 - **jp-disease-finding-dataset** – created using the scripts in this repository and available on [Hugging Face](https://huggingface.co/datasets/seiya/jp-disease-finding-dataset). It consists of pairs of medical text and JSON annotations describing diseases and their associated findings.
 
-Sample data used in this repository is under `data/`.
+Pseudo data used in this repository is under `data/`.
 
 ## Model
 A LoRA adapter trained with the scripts in this repository can be found at:
