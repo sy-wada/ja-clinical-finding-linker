@@ -1,16 +1,8 @@
 # -*- coding: utf-8 -*- 
 import os
 import gc
-# os.environ["DISABLE_UNSLOTH_COMPILE"] = "1"
-# # さらに他のコンパイル関連設定も無効化
-# os.environ["TORCH_COMPILE"] = "0"
-# os.environ["PYTORCH_NO_CUDA_MEMORY_CACHING"] = "1"
-# os.environ["TORCH_LOGS"] = "+dynamo"
-# os.environ["TORCHDYNAMO_VERBOSE"] = "1"
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-import re
 import json
 from typing import Any
 import argparse
@@ -29,8 +21,6 @@ from transformers import (
     DataCollatorForSeq2Seq,
     TrainerCallback
 )
-from pydantic import ValidationError
-from json import JSONDecodeError
 
 from datasets import Dataset
 
@@ -116,7 +106,6 @@ def format_prompt(
         "attention_mask": tokenized_full["attention_mask"][0],
         "labels": labels[0],
         "eligible": eligible,
-        # "output_text": output_text
     }
 
 def filter_valid_examples(example):
@@ -153,7 +142,7 @@ def main(
     output_dir: Path = None,
     adapter_dir: str = None,
     random_state: int = 3407,
-    lora_rank: int = 16, # LoRA のランク: Suggested 8, 16, 32, 64, 128
+    lora_rank: int = 16, # LoRA rank. Suggested 8, 16, 32, 64, 128
     epoch: int = 1,
     learning_rate: float = 1e-4,
     max_seq_length: int = 8192,
@@ -161,23 +150,6 @@ def main(
     load_in_4bit: bool = True,
     fast_inference: bool = False
     ):
-    # model, tokenizer = FastLanguageModel.from_pretrained(
-    #     model_name = model_name,
-    #     max_seq_length = max_seq_length,
-    #     dtype = torch.bfloat16,
-    #     load_in_4bit = load_in_4bit,
-    #     device_map="auto",
-    #     fix_tokenizer=True,
-    #     trust_remote_code=False,
-    #     use_gradient_checkpointing="unsloth",
-    #     fast_inference=fast_inference,
-    #     gpu_memory_utilization=0.9,
-    #     float8_kv_cache=False,
-    #     random_state=random_state,
-    #     max_lora_rank=64,
-    #     disable_log_stats=True,
-    # )
-    # 高速化狙い
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name = model_name,
         max_seq_length = max_seq_length,
@@ -186,7 +158,7 @@ def main(
         device_map="auto",
         fix_tokenizer=True,
         trust_remote_code=False,
-        use_gradient_checkpointing="unsloth",   # Falseは速度優先。"unsloth"はメモリ効率優先。
+        use_gradient_checkpointing="unsloth",
         fast_inference=fast_inference,
         gpu_memory_utilization=0.9,
         float8_kv_cache=False,
@@ -194,7 +166,6 @@ def main(
         max_lora_rank=lora_rank,
         disable_log_stats=True,
     )
-    # Phi-4には元々設定が存在していない。つけても効果はない？
     model.flash_attn = True
     model = FastLanguageModel.get_peft_model(
         model,
@@ -204,9 +175,7 @@ def main(
         lora_alpha = lora_rank,
         lora_dropout = 0, # Supports any, but = 0 is optimized
         bias = "none",    # Supports any, but = "none" is optimized
-        # [NEW] "unsloth" uses 30% less VRAM, fits 2x larger batch sizes!
-        use_gradient_checkpointing = "unsloth", # True or "unsloth" for very long context
-        # use_gradient_checkpointing = False, # True or "unsloth" for very long context
+        use_gradient_checkpointing = "unsloth",
         random_state = random_state,
         use_rslora = False,  # We support rank stabilized LoRA
         loftq_config = None, # And LoftQ
@@ -237,15 +206,6 @@ def main(
         return
     
     dataset = Dataset.from_list(records)
-    # 異常なデータがクラッシュの原因？調査のための挿入
-    # import pandas as pd
-    # df = pd.DataFrame(records)
-    # df['len_article_text'] = df['article_text'].apply(lambda x: len(tokenizer.encode(x)))
-    # df['len_output_text'] = df['output_text'].apply(lambda x: len(tokenizer.encode(x)))
-    # df['total_len'] = df['len_article_text'] + df['len_output_text']
-    # print(df[['len_article_text', 'len_output_text', 'total_len']].sort_values(by='total_len', ascending=False).head(20))
-    # # raise ValueError("stop here")
-    # dataset = Dataset.from_pandas(df[df['total_len'] >= 25000], preserve_index=False)
 
     # データセットの前処理
     preprocess_kwargs = {
@@ -291,7 +251,6 @@ def main(
             per_device_train_batch_size=1,
             gradient_accumulation_steps=4,
             warmup_ratio=0.05,
-            # torch_compile=False,
             num_train_epochs=epoch,  # 必要に応じてエポック数を設定してください
             learning_rate=learning_rate, # We normally suggest 2e-4, 1e-4, 5e-5, 2e-5 as numbers to try
             fp16=not is_bfloat16_supported(),
@@ -306,7 +265,6 @@ def main(
             output_dir=output_dir,
             save_strategy="no"
         ),
-        # callbacks=[EmptyCacheCallback(every_n_steps=1)],
     )
     lora_dir = output_dir / adapter_dir
 
@@ -314,9 +272,6 @@ def main(
 
     model.save_pretrained(lora_dir)
     tokenizer.save_pretrained(lora_dir)
-    # `save_pretrained_merged`は潜在的にエラーが生じる。adapterのみを保存してvllmでよみこむ方針とする。
-    # model.save_pretrained_merged(lora_dir, tokenizer, save_method="merged_4bit", safe_serialization=True)
-    # model.save_pretrained_merged(lora_dir / 'lora', tokenizer, save_method="lora", safe_serialization=True)
  
     return
 
